@@ -1,6 +1,7 @@
 import "./style.css";
 import { FRAME_H, FRAME_W } from "./config";
 import { generateDailyMap, todayString } from "./content/generator";
+import { CONTAINER_SKINS, SKIN_COUNT } from "./content/skins";
 import { Session } from "./game/session";
 import type { DailyMap } from "./game/types";
 import { Keyboard } from "./input/keyboard";
@@ -37,6 +38,7 @@ async function loadFonts() {
 
 async function main() {
   const map: DailyMap = generateDailyMap(todayString());
+  if (import.meta.env.DEV) devOverrides(map);
   applyPaletteToCss(PALETTES[map.biome]);
 
   let scale = fitScale();
@@ -179,6 +181,15 @@ async function main() {
     // Debug handle for poking at runs from the console / automated screenshots.
     Object.assign(window, { __typo: { get session() { return session; }, map, start } });
   }
+}
+
+/** Dev only: `?skin=N` dresses every obstacle and container in skin N, to review the looks. */
+function devOverrides(map: DailyMap) {
+  const skin = new URLSearchParams(location.search).get("skin");
+  if (skin === null) return;
+  const n = Number(skin);
+  for (const s of map.slots) s.skin = n % SKIN_COUNT[s.obstacle];
+  for (const pf of map.platforms) pf.skins = pf.skins.map(() => n % CONTAINER_SKINS.length);
 }
 
 main();
