@@ -392,9 +392,19 @@ body {
   padding: 8px;
 }
 .stat b {
-  display: block;
+  /* fixed line box so an emoji (taller glyph) can't push the label down */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 32px;
+  line-height: 1;
   font-family: var(--display);
   font-size: 26px;
+}
+.stat b i {
+  font-style: normal;
+  font-size: 20px;
 }
 .stat span {
   font-size: 13px;

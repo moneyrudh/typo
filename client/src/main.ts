@@ -124,7 +124,7 @@ async function main() {
       <div class="stats">
         <div class="stat"><b>${Math.round(r.wpm)}</b><span>wpm</span></div>
         <div class="stat"><b>${Math.round(r.accuracy * 100)}%</b><span>accuracy</span></div>
-        <div class="stat"><b>🔥 ${r.bestCombo}</b><span>best streak</span></div>
+        <div class="stat"><b><i>🔥</i>${r.bestCombo}</b><span>best streak</span></div>
         <div class="stat"><b>${(r.reactionMs / 1000).toFixed(2)}s</b><span>avg reaction</span></div>
       </div>
       <div class="squares">${r.outcomes
