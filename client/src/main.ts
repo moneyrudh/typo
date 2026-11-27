@@ -10,6 +10,7 @@ import { Scene } from "./render/scene";
 import { startGrain } from "./ui/grain";
 import { formatScore, Hud } from "./ui/hud";
 import { OUTCOME_LABEL } from "./ui/ratings";
+import { bindRunGrid, runGridHtml } from "./ui/runGrid";
 import { shareText } from "./ui/share";
 
 type Mode = "menu" | "playing" | "results";
@@ -127,12 +128,10 @@ async function main() {
         <div class="stat"><b><i>🔥</i>${r.bestCombo}</b><span>best streak</span></div>
         <div class="stat"><b>${(r.reactionMs / 1000).toFixed(2)}s</b><span>avg reaction</span></div>
       </div>
-      <div class="squares">${r.outcomes
-        .map((o, i) => `<span class="sq ${o}${map.slots[i].tricky ? " tricky" : ""}" title="${map.slots[i].word}"></span>`)
-        .join("")}</div>
-      <div class="btn-row">
+      ${runGridHtml(map, r.outcomes)}
+      <div class="result-actions">
+        <button class="link" id="again-btn">practice run →</button>
         <button class="btn" id="share-btn">SHARE</button>
-        <button class="btn secondary" id="again-btn">run again</button>
       </div>`;
     overlay.className = "open";
     status.textContent = "";
@@ -147,6 +146,7 @@ async function main() {
       }
     });
     overlay.querySelector("#again-btn")!.addEventListener("click", start);
+    bindRunGrid(overlay.querySelector(".run-grid")!, map, r.outcomes);
   }
 
   new Keyboard(document.getElementById("keyboard")!, (key) => {
