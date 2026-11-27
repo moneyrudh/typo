@@ -52,4 +52,6 @@ export type DailyMap = {
   endT: number;
 };
 
-export type SlotOutcome = "perfect" | "clean" | "missed";
+/** How well a word was typed. Speed sets the tier; any typo drops it one step. */
+export type Rating = "perfect" | "great" | "nice" | "phew";
+export type SlotOutcome = Rating | "missed";

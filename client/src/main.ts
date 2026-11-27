@@ -7,7 +7,8 @@ import { Keyboard } from "./input/keyboard";
 import { applyPaletteToCss, PALETTES } from "./render/palette";
 import { Scene } from "./render/scene";
 import { startGrain } from "./ui/grain";
-import { Hud } from "./ui/hud";
+import { formatScore, Hud } from "./ui/hud";
+import { OUTCOME_LABEL } from "./ui/ratings";
 import { shareText } from "./ui/share";
 
 type Mode = "menu" | "playing" | "results";
@@ -66,13 +67,13 @@ async function main() {
       wordComplete: (slot, run) => {
         hud.wordComplete(slot, run);
         hud.setScore(s.score);
-        hud.setCombo(s.combo, s.comboMultiplier);
+        hud.setStreak(s.combo);
         hud.setProgress(++done, map.slots.length);
-        status.textContent = run.wrongKeys === 0 ? "perfect!" : "nice";
+        status.textContent = OUTCOME_LABEL[run.rating ?? "phew"].toLowerCase();
       },
       wordMissed: (slot) => {
         hud.wordMissed(slot);
-        hud.setCombo(0, 1);
+        hud.setStreak(0);
         hud.setProgress(++done, map.slots.length);
         status.textContent = "too slow!";
       },
@@ -102,7 +103,7 @@ async function main() {
       <div class="sub">daily #${map.day} · ${map.biome}</div>
       <p class="how">Words appear as obstacles approach and time slows down.
         Type each word before the slow-mo ends to pull off the move.
-        Faster and cleaner = more points.</p>
+        Every word is worth 1 point — clean and quick scores full marks.</p>
       <button class="btn" id="start-btn">START</button>
       <div class="hint">or press any letter</div>`;
     overlay.className = "open";
@@ -114,17 +115,19 @@ async function main() {
     mode = "results";
     const r = session.results();
     const text = shareText(map, r);
-    const tricky = map.slots.find((s) => s.tricky);
     overlay.innerHTML = `
       <div class="sub">typo #${map.day} · run complete</div>
-      <div class="big-score">${r.score.toLocaleString()}</div>
+      <div class="big-score">${formatScore(r.score)}<small>/${r.total}</small></div>
+      <div class="sub">${r.cleared}/${r.total} words cleared</div>
       <div class="stats">
-        <div class="stat"><b>${r.cleared}/${r.total}</b><span>words cleared</span></div>
+        <div class="stat"><b>${Math.round(r.wpm)}</b><span>wpm</span></div>
         <div class="stat"><b>${Math.round(r.accuracy * 100)}%</b><span>accuracy</span></div>
-        <div class="stat"><b>🔥 ${r.bestCombo}</b><span>best combo</span></div>
-        <div class="stat"><b>${r.trickyCleared ? "⭐" : "💥"}</b><span>${tricky?.word ?? "tricky"}</span></div>
+        <div class="stat"><b>🔥 ${r.bestCombo}</b><span>best streak</span></div>
+        <div class="stat"><b>${(r.reactionMs / 1000).toFixed(2)}s</b><span>avg reaction</span></div>
       </div>
-      <div class="squares">${text.split("\n")[2]}</div>
+      <div class="squares">${r.outcomes
+        .map((o, i) => `<span class="sq ${o}${map.slots[i].tricky ? " tricky" : ""}" title="${map.slots[i].word}"></span>`)
+        .join("")}</div>
       <div class="btn-row">
         <button class="btn" id="share-btn">SHARE</button>
         <button class="btn secondary" id="again-btn">run again</button>

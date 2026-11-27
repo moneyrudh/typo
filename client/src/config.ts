@@ -18,13 +18,14 @@ export const SLOWMO_EXIT_REAL = 0.15; // real seconds to ease back to 1x after e
 export const MIN_SLOT_GAP_GAME = 0.35; // breathing room between one action ending and the next ramp
 
 // Scoring (see ROADMAP §2.3)
-export const BASE_POINTS = 100;
-export const TRICKY_MULTIPLIER = 2;
-export const COMBO_STEP = 0.1;
-export const COMBO_CAP = 10;
+// Every word is worth up to 1 point, so a run is scored out of WORDS_PER_RUN.
+export const CLEAR_POINTS = 0.8; // clearing a word with no typos
+export const SPEED_POINTS = 0.2; // extra for speed, full when finished within the PERFECT band
+export const TYPO_PENALTY = 0.05; // per wrong key inside the window
+export const MIN_CLEAR_POINTS = 0.3; // a cleared word never scores less than this
 
 // Run shape
-export const TARGET_SLOTS = 16; // regular words, plus one tricky finale
+export const WORDS_PER_RUN = 20; // including the tricky finale
 export const RUN_TAIL_GAME = 1.6; // game-seconds of running after the last obstacle
 
 export const LAUNCH_DATE = "2026-11-26"; // daily #1

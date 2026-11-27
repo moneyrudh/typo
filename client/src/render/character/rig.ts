@@ -1,11 +1,14 @@
 import {
   CapsuleGeometry,
+  ConeGeometry,
+  CylinderGeometry,
   Group,
   Mesh,
   MeshBasicMaterial,
   Object3D,
   SphereGeometry,
   TorusGeometry,
+  Vector3,
   type BufferGeometry,
 } from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
@@ -13,12 +16,15 @@ import { inked, toon } from "../materials";
 import type { Palette } from "../palette";
 import { DIM, type Pose } from "./pose";
 
-// A chunky vinyl-toy runner built from primitives, with a joint hierarchy that maps the
-// sagittal-plane pose onto 3D. Limb bones hang along -Y, so a bone's rotation.z equals
-// its "from down" angle; torso bones point along +Y, so forward lean is -rotation.z.
+// The hero: athletic proportions (broad shoulders, slim waist, smaller head), spiky hair,
+// a jacket with a popped collar and a scarf. Built from primitives on a joint hierarchy
+// that maps the sagittal-plane pose onto 3D. Limb bones hang along -Y, so a bone's
+// rotation.z equals its "from down" angle; torso bones point along +Y, so forward lean
+// is -rotation.z. The scarf tails are simulated separately (see scarf.ts).
 
-const LINE = 1.5; // outline thickness
+const LINE = 1.6; // outline thickness
 const YAW = -0.32; // turn the body a little towards the camera
+const HEAD = 11; // skull radius
 
 type LimbRig = { root: Object3D; mid: Object3D; end: Object3D };
 
@@ -34,144 +40,182 @@ export class Rig {
   private armF: LimbRig;
 
   constructor(pal: Palette) {
-    const { ink } = pal;
-    const shirt = toon(pal.spotB);
+    const { ink, hero } = pal;
+    const jacket = toon(hero.jacket);
+    const trim = toon(hero.trim);
     const skin = toon(pal.skin);
-    const shorts = toon(pal.shorts);
-    const shoe = toon(pal.spotA);
-    const sole = toon(pal.paper);
-    const hair = toon(pal.ink);
+    const pants = toon(hero.pants);
+    const boots = toon(hero.boots);
+    const soles = toon(hero.soles);
+    const hair = toon(hero.hair);
+    const gloves = toon(hero.gloves);
+    const scarf = toon(hero.scarf);
     const part = (g: BufferGeometry, m: ReturnType<typeof toon>, t = LINE) => inked(g, m, t, ink);
 
     this.root.rotation.y = YAW;
     this.root.add(this.body);
 
-    // pelvis / shorts
-    const pelvis = part(new RoundedBoxGeometry(17, 13, 19, 3, 5), shorts);
+    // hips + belt
+    const pelvis = part(new RoundedBoxGeometry(16, 12, 18, 3, 5), pants);
     pelvis.position.y = -1;
     this.body.add(pelvis);
+    const belt = part(new TorusGeometry(8.6, 1.5, 6, 20), trim, 1);
+    belt.rotation.x = Math.PI / 2;
+    belt.scale.set(0.95, 1.08, 1);
+    belt.position.y = 4;
+    this.body.add(belt);
 
-    // legs
+    // legs: full-length trousers into chunky boots
     const makeLeg = (z: number, far: boolean): LimbRig => {
       const hip = new Object3D();
       hip.position.set(0, DIM.HIP_Y, z);
-      const thigh = part(new CapsuleGeometry(5.6, DIM.THIGH - 6, 4, 10), shorts);
+      const thigh = part(new CapsuleGeometry(5.4, DIM.THIGH - 6, 4, 10), pants);
       thigh.position.y = -DIM.THIGH / 2;
       hip.add(thigh);
       const knee = new Object3D();
       knee.position.y = -DIM.THIGH;
       hip.add(knee);
-      const shin = part(new CapsuleGeometry(4.3, DIM.SHIN - 5, 4, 10), skin);
-      shin.position.y = -DIM.SHIN / 2;
+      const shin = part(new CapsuleGeometry(4.4, DIM.SHIN - 6, 4, 10), pants);
+      shin.position.y = -DIM.SHIN / 2 + 1;
       knee.add(shin);
-      const sock = part(new CapsuleGeometry(4.6, 3, 3, 10), sole);
-      sock.position.y = -DIM.SHIN + 3;
-      knee.add(sock);
+      const cuff = part(new CapsuleGeometry(5.2, 5, 3, 12), boots);
+      cuff.position.y = -DIM.SHIN + 3.5;
+      knee.add(cuff);
       const ankle = new Object3D();
       ankle.position.y = -DIM.SHIN;
       knee.add(ankle);
-      const foot = part(new RoundedBoxGeometry(16, 7.5, 9, 3, 3), shoe);
-      foot.position.set(4.5, -DIM.ANKLE + 3.7, 0);
+      const foot = part(new RoundedBoxGeometry(17, 8, 10, 3, 3.2), boots);
+      foot.position.set(4.5, -DIM.ANKLE + 4, 0);
       ankle.add(foot);
-      const footSole = part(new RoundedBoxGeometry(16.5, 2.6, 9.4, 2, 1.2), sole, 1);
-      footSole.position.set(4.5, -DIM.ANKLE + 0.6, 0);
-      ankle.add(footSole);
+      const sole = part(new RoundedBoxGeometry(17.5, 3, 10.4, 2, 1.2), soles, 1);
+      sole.position.set(4.5, -DIM.ANKLE + 0.8, 0);
+      ankle.add(sole);
       if (far) dim(hip);
       this.body.add(hip);
       return { root: hip, mid: knee, end: ankle };
     };
-    this.legF = makeLeg(-5.5, true);
-    this.legN = makeLeg(5.5, false);
+    this.legF = makeLeg(-5, true);
+    this.legN = makeLeg(5, false);
 
-    // torso
+    // torso: slim waist widening to broad shoulders (V-taper)
     this.body.add(this.spine);
-    const belly = part(new CapsuleGeometry(9.5, 8, 4, 12), shirt);
-    belly.position.y = DIM.SPINE / 2;
-    belly.scale.set(1, 1, 1.05);
-    this.spine.add(belly);
+    const waist = part(new CapsuleGeometry(8, 7, 4, 12), jacket);
+    waist.position.y = DIM.SPINE / 2;
+    this.spine.add(waist);
     this.chest.position.y = DIM.SPINE;
     this.spine.add(this.chest);
-    const torso = part(new RoundedBoxGeometry(19, DIM.CHEST + 3, 24, 4, 8), shirt);
+    const torso = part(new CylinderGeometry(13, 9, DIM.CHEST + 4, 16), jacket);
+    torso.scale.set(0.78, 1, 1.08);
     torso.position.y = DIM.CHEST / 2;
     this.chest.add(torso);
-    // collar
-    const collar = part(new TorusGeometry(5.5, 1.8, 8, 16), toon(pal.paper), 1);
-    collar.rotation.x = Math.PI / 2;
-    collar.position.set(0, DIM.CHEST + 1, 0);
+    const zip = part(new RoundedBoxGeometry(2.4, DIM.CHEST + 2, 3, 1, 1), trim, 0.8);
+    zip.position.set(9.4, DIM.CHEST / 2, 0);
+    zip.rotation.z = -0.12;
+    this.chest.add(zip);
+    for (const z of [12.5, -12.5]) {
+      const pad = part(new SphereGeometry(6.2, 12, 10), jacket);
+      pad.position.set(0, DIM.CHEST - 2, z);
+      this.chest.add(pad);
+    }
+    // popped collar + scarf wrap
+    const collar = part(new CylinderGeometry(7.8, 6.6, 6, 16, 1, true), trim, 1);
+    collar.position.y = DIM.CHEST + 2;
     this.chest.add(collar);
+    const wrap = part(new TorusGeometry(6.4, 3.2, 10, 20), scarf, 1.2);
+    wrap.rotation.x = Math.PI / 2;
+    wrap.position.y = DIM.CHEST + 1;
+    this.chest.add(wrap);
 
     // head
     this.neck.position.y = DIM.CHEST;
     this.chest.add(this.neck);
     const neckMesh = part(new CapsuleGeometry(3.6, 3, 3, 8), skin);
-    neckMesh.position.y = 2.5;
+    neckMesh.position.y = 3;
     this.neck.add(neckMesh);
     const head = new Group();
-    head.position.y = DIM.NECK + DIM.HEAD_R - 2;
+    head.position.y = DIM.NECK + HEAD - 1;
     this.neck.add(head);
-    const skull = part(new SphereGeometry(DIM.HEAD_R, 24, 16), skin);
-    skull.scale.set(1, 1.02, 0.96);
+    const skull = part(new SphereGeometry(HEAD, 24, 16), skin);
+    skull.scale.set(1, 1.08, 0.94);
     head.add(skull);
-    const hairCap = part(new SphereGeometry(DIM.HEAD_R + 0.9, 24, 12, 0, Math.PI * 2, 0, Math.PI * 0.42), hair);
-    hairCap.rotation.z = 0.5;
-    hairCap.position.set(-1, 0.5, 0);
-    head.add(hairCap);
-    for (let i = 0; i < 4; i++) {
-      const tuft = part(new SphereGeometry(3.4, 10, 8), hair, 1);
-      tuft.scale.set(1.6, 0.8, 1);
-      tuft.position.set(-9 + i * 1.5, 7 - i * 2.4, (i % 2 ? 1 : -1) * 4);
-      tuft.rotation.z = 0.6;
-      head.add(tuft);
+    const jaw = part(new SphereGeometry(6.5, 14, 10), skin, 1);
+    jaw.position.set(4.5, -5.5, 0);
+    head.add(jaw);
+    // hair: a cap plus spikes swept back by the wind
+    const cap = part(new SphereGeometry(HEAD + 0.8, 24, 12, 0, Math.PI * 2, 0, Math.PI * 0.45), hair);
+    cap.rotation.z = 0.45;
+    cap.position.set(-0.8, 0.8, 0);
+    head.add(cap);
+    const spikes: [number, number, number, number, number][] = [
+      // x, y, z, tilt (from up, + = back), length
+      [3, 10, 0, 1.0, 12],
+      [-2, 11, 4, 1.35, 15],
+      [-2, 11, -4, 1.35, 15],
+      [-7, 8, 1, 1.65, 17],
+      [-9, 3, -3, 1.9, 14],
+      [-9, 2, 4, 1.9, 13],
+      [7, 8, 3, 0.5, 9],
+    ];
+    for (const [x, y, z, tilt, len] of spikes) {
+      const spike = part(new ConeGeometry(3.6, len, 8), hair, 1);
+      spike.position.set(x - Math.sin(tilt) * len * 0.35, y + Math.cos(tilt) * len * 0.35, z);
+      spike.rotation.z = tilt;
+      head.add(spike);
     }
-    const band = part(new TorusGeometry(DIM.HEAD_R + 0.6, 1.9, 8, 28), shirt, 1);
-    band.rotation.set(Math.PI / 2, 0, 0.42);
-    band.position.y = 3;
-    head.add(band);
-    const nose = part(new SphereGeometry(2.6, 10, 8), skin, 1);
-    nose.position.set(DIM.HEAD_R - 0.5, -1.5, 1.5);
-    head.add(nose);
-    const ear = part(new SphereGeometry(3, 10, 8), skin, 1);
-    ear.scale.set(0.8, 1, 0.5);
-    ear.position.set(-1, -1, DIM.HEAD_R - 1);
+    const ear = part(new SphereGeometry(2.8, 10, 8), skin, 1);
+    ear.scale.set(0.75, 1, 0.5);
+    ear.position.set(-1, -0.5, HEAD - 1.2);
     head.add(ear);
+    const nose = part(new SphereGeometry(2.2, 10, 8), skin, 1);
+    nose.position.set(HEAD - 0.3, -1.5, 1.6);
+    head.add(nose);
     const white = new MeshBasicMaterial({ color: 0xffffff });
-    const pupil = new MeshBasicMaterial({ color: ink });
-    for (const z of [5.2, -3.5]) {
-      const eye = new Mesh(new SphereGeometry(2.7, 12, 10), white);
-      eye.scale.set(0.6, 1.15, 0.9);
-      eye.position.set(DIM.HEAD_R - 2.3, 2, z);
-      const p = new Mesh(new SphereGeometry(1.5, 10, 8), pupil);
-      p.position.set(1.2, -0.2, 0.3);
-      eye.add(p);
+    const dark = new MeshBasicMaterial({ color: ink });
+    for (const z of [4.6, -3.4]) {
+      const eye = new Mesh(new SphereGeometry(2.5, 12, 10), white);
+      eye.scale.set(0.55, 0.95, 0.95);
+      eye.position.set(HEAD - 2.4, 1.6, z);
+      const pupil = new Mesh(new SphereGeometry(1.45, 10, 8), dark);
+      pupil.position.set(1.1, -0.2, 0.2);
+      eye.add(pupil);
       head.add(eye);
+      // determined brow, angled down towards the nose
+      const brow = new Mesh(new CapsuleGeometry(0.9, 4.2, 2, 6), dark);
+      brow.position.set(HEAD - 1.6, 5, z);
+      brow.rotation.set(Math.PI / 2, z > 0 ? 0.35 : -0.35, 0);
+      head.add(brow);
     }
 
-    // arms
+    // arms: jacket sleeves, trim cuffs, gloves
     const makeArm = (z: number, far: boolean): LimbRig => {
       const sh = new Object3D();
       sh.position.set(0, DIM.CHEST - DIM.SHOULDER_DROP, z);
-      const upper = part(new CapsuleGeometry(4.3, DIM.UPPER_ARM - 4, 4, 10), shirt);
+      const upper = part(new CapsuleGeometry(4.5, DIM.UPPER_ARM - 4, 4, 10), jacket);
       upper.position.y = -DIM.UPPER_ARM / 2;
       sh.add(upper);
       const elbow = new Object3D();
       elbow.position.y = -DIM.UPPER_ARM;
       sh.add(elbow);
-      const fore = part(new CapsuleGeometry(3.5, DIM.FOREARM - 4, 4, 10), skin);
-      fore.position.y = -DIM.FOREARM / 2;
+      const fore = part(new CapsuleGeometry(3.9, DIM.FOREARM - 5, 4, 10), jacket);
+      fore.position.y = -DIM.FOREARM / 2 + 1;
       elbow.add(fore);
+      const cuffRing = part(new TorusGeometry(3.7, 1.3, 6, 14), trim, 0.8);
+      cuffRing.rotation.x = Math.PI / 2;
+      cuffRing.position.y = -DIM.FOREARM + 3;
+      elbow.add(cuffRing);
       const wrist = new Object3D();
       wrist.position.y = -DIM.FOREARM;
       elbow.add(wrist);
-      const hand = part(new SphereGeometry(4.4, 12, 10), skin);
-      hand.scale.set(1, 1.1, 0.85);
+      const hand = part(new SphereGeometry(4.3, 12, 10), gloves);
+      hand.scale.set(1, 1.12, 0.85);
       hand.position.y = -2;
       wrist.add(hand);
       if (far) dim(sh);
       this.chest.add(sh);
       return { root: sh, mid: elbow, end: wrist };
     };
-    this.armF = makeArm(-12.5, true);
-    this.armN = makeArm(12.5, false);
+    this.armF = makeArm(-13.5, true);
+    this.armN = makeArm(13.5, false);
   }
 
   /** Pose the rig. `x`, `y` are the pelvis position in world units. */
@@ -188,8 +232,14 @@ export class Rig {
     setLimb(this.armN, p.nSh + armBase, p.nEl, p.nWr);
     setLimb(this.armF, p.fSh + armBase, p.fEl, p.fWr);
     // keep arms slightly away from the body so they don't clip through the torso
-    this.armN.root.rotation.x = -0.12;
-    this.armF.root.rotation.x = 0.12;
+    this.armN.root.rotation.x = -0.14;
+    this.armF.root.rotation.x = 0.14;
+  }
+
+  /** World position where a scarf tail leaves the neck (call after apply). */
+  scarfAnchor(out: Vector3, side: number): Vector3 {
+    this.root.updateMatrixWorld(true);
+    return this.chest.localToWorld(out.set(-6, DIM.CHEST + 1, side * 3));
   }
 }
 
@@ -204,7 +254,7 @@ function dim(obj: Object3D) {
   obj.traverse((o) => {
     if (o instanceof Mesh && o.name !== "outline" && "color" in o.material) {
       const m = (o.material as ReturnType<typeof toon>).clone();
-      m.color.multiplyScalar(0.82);
+      m.color.multiplyScalar(0.8);
       o.material = m;
     }
   });
