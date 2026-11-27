@@ -1,99 +1,218 @@
-import { Container, Graphics } from "pixi.js";
-import { GROUND_Y } from "../config";
-import type { ObstacleKind } from "../game/types";
+import {
+  BackSide,
+  BoxGeometry,
+  CircleGeometry,
+  CylinderGeometry,
+  Group,
+  Mesh,
+  MeshBasicMaterial,
+  Object3D,
+  PlaneGeometry,
+  type Material,
+} from "three";
+import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
+import { OBSTACLES } from "../game/actions";
+import type { ObstacleKind, Platform } from "../game/types";
+import { inked, toon, type Textures } from "./materials";
 import type { Palette } from "./palette";
 
-// Obstacles are drawn with their origin at the bottom-centre, on the ground line.
-// Each is drawn twice: a main pass and an offset spot-ink "ghost" pass for the riso look.
+// 3D obstacles, built from primitives in world units with the origin at the bottom-centre
+// on the ground. Obstacles that span the path (rails, barriers, beams) run along z so they
+// read as real objects crossing the runner's lane.
 
-type Ink = { line: number; a: number; b: number; c: number; paper: number };
+const LINE = 2;
 
-const TOP = -GROUND_Y - 20; // off the top of the screen, for cables/chains
+export type ObstacleView = { group: Group; debris: number[]; spin?: Object3D };
 
-const DRAW: Record<ObstacleKind, (g: Graphics, k: Ink) => void> = {
-  crate(g, k) {
-    g.rect(-24, -48, 48, 48).fill(k.a).stroke({ width: 4, color: k.line });
-    g.rect(-17, -41, 34, 34).stroke({ width: 2.5, color: k.line });
-    g.moveTo(-17, -41).lineTo(17, -7).moveTo(17, -41).lineTo(-17, -7).stroke({ width: 3, color: k.line });
-  },
-  barrier(g, k) {
-    g.rect(-27, -40, 6, 40).fill(k.line);
-    g.rect(21, -40, 6, 40).fill(k.line);
-    g.rect(-34, -44, 68, 18).fill(k.paper).stroke({ width: 3, color: k.line });
-    for (let i = 0; i < 4; i++) {
-      const x = -30 + i * 17;
-      g.poly([x, -27, x + 8, -43, x + 15, -43, x + 7, -27]).fill(k.b);
-    }
-    g.rect(-34, -44, 68, 18).stroke({ width: 3, color: k.line });
-  },
-  acunit(g, k) {
-    g.rect(-29, -50, 58, 50).fill(k.c).stroke({ width: 4, color: k.line });
-    g.circle(-8, -25, 15).fill(k.paper).stroke({ width: 3, color: k.line });
-    g.moveTo(-18, -25).lineTo(2, -25).moveTo(-8, -35).lineTo(-8, -15).stroke({ width: 2.5, color: k.line });
-    for (let i = 0; i < 4; i++) g.moveTo(14, -40 + i * 8).lineTo(24, -40 + i * 8);
-    g.stroke({ width: 2.5, color: k.line });
-  },
-  beam(g, k) {
-    g.moveTo(-30, TOP).lineTo(-30, -72).moveTo(30, TOP).lineTo(30, -72).stroke({ width: 3, color: k.line });
-    g.rect(-46, -72, 92, 22).fill(k.b).stroke({ width: 4, color: k.line });
-    for (let i = 0; i < 5; i++) g.circle(-34 + i * 17, -61, 4).fill(k.paper).stroke({ width: 2, color: k.line });
-  },
-  sign(g, k) {
-    g.moveTo(-26, TOP).lineTo(-26, -80).moveTo(26, TOP).lineTo(26, -80).stroke({ width: 3, color: k.line });
-    g.rect(-40, -80, 80, 28).fill(k.a).stroke({ width: 4, color: k.line });
-    for (const x of [-20, 0, 20]) g.moveTo(x - 7, -72).lineTo(x, -61).lineTo(x + 7, -72);
-    g.stroke({ width: 3.5, color: k.line, cap: "round", join: "round" });
-  },
-  railing(g, k) {
-    for (const x of [-35, -3, 29]) g.rect(x, -38, 6, 38).fill(k.line);
-    g.moveTo(-35, -20).lineTo(35, -20).stroke({ width: 3, color: k.line });
-    g.rect(-38, -42, 76, 7).fill(k.a).stroke({ width: 3, color: k.line });
-  },
-  bench(g, k) {
-    g.rect(-30, -24, 6, 24).fill(k.line);
-    g.rect(24, -24, 6, 24).fill(k.line);
-    g.rect(-32, -44, 5, 22).fill(k.line);
-    g.rect(27, -44, 5, 22).fill(k.line);
-    g.rect(-36, -44, 72, 7).fill(k.b).stroke({ width: 3, color: k.line });
-    g.rect(-38, -26, 76, 8).fill(k.b).stroke({ width: 3, color: k.line });
-  },
-  wall(g, k) {
-    g.rect(-22, -100, 44, 100).fill(k.b).stroke({ width: 4, color: k.line });
-    for (let row = 0; row < 8; row++) {
-      const y = -100 + row * 12.5;
-      g.moveTo(-22, y).lineTo(22, y);
-      const off = row % 2 === 0 ? 0 : 11;
-      for (let x = -22 + off; x < 22; x += 22) g.moveTo(x, y).lineTo(x, y + 12.5);
-    }
-    g.stroke({ width: 2, color: k.line });
-    g.rect(-26, -108, 52, 10).fill(k.a).stroke({ width: 3.5, color: k.line });
-    g.moveTo(-14, -46).lineTo(-5, -60).lineTo(4, -44).lineTo(14, -58).stroke({ width: 4, color: k.a, cap: "round" });
-  },
-};
+/** A box with a slightly larger back-face shell, which outlines hard edges cleanly. */
+export function inkBox(w: number, h: number, d: number, mat: Material | Material[], ink: number, t = LINE): Mesh {
+  const m = new Mesh(new BoxGeometry(w, h, d), mat);
+  m.castShadow = true;
+  m.receiveShadow = true;
+  const shell = new Mesh(new BoxGeometry(w + t * 2, h + t * 2, d + t * 2), inkShell(ink));
+  shell.name = "outline";
+  m.add(shell);
+  return m;
+}
 
-/** Main colour of each obstacle, used for debris. */
-export function debrisColors(kind: ObstacleKind, pal: Palette): number[] {
+const shells = new Map<number, MeshBasicMaterial>();
+function inkShell(ink: number) {
+  let m = shells.get(ink);
+  if (!m) {
+    m = new MeshBasicMaterial({ color: ink, side: BackSide });
+    shells.set(ink, m);
+  }
+  return m;
+}
+
+function rod(r: number, len: number, mat: ReturnType<typeof toon>, ink: number, t = 1.4) {
+  return inked(new CylinderGeometry(r, r, len, 10), mat, t, ink);
+}
+
+export function makeObstacle(kind: ObstacleKind, pal: Palette, tex: Textures): ObstacleView {
+  const g = new Group();
+  const { ink } = pal;
+  const spec = OBSTACLES[kind];
+
   switch (kind) {
-    case "crate":
-    case "sign":
-    case "railing":
-      return [pal.spotA, pal.ink];
-    case "acunit":
-      return [pal.muted, pal.ink];
-    default:
-      return [pal.spotB, pal.ink];
+    case "crate": {
+      const mat = toon(0xffffff, tex.crate);
+      const box = inked(new RoundedBoxGeometry(48, 48, 48, 2, 3), mat, LINE, ink);
+      box.position.y = 24;
+      box.rotation.y = 0.12;
+      g.add(box);
+      const back = inked(new RoundedBoxGeometry(40, 40, 40, 2, 3), mat, LINE, ink);
+      back.position.set(-10, 20, -46);
+      back.rotation.y = -0.3;
+      g.add(back);
+      return { group: g, debris: [pal.wood, pal.woodDark, pal.ink] };
+    }
+    case "barrier": {
+      const board = inked(new RoundedBoxGeometry(8, 18, 110, 2, 2), toon(0xffffff, tex.stripes), LINE, ink);
+      board.position.y = spec.height - 9;
+      g.add(board);
+      const legMat = toon(pal.paper);
+      for (const z of [-44, 44]) {
+        for (const dir of [-1, 1]) {
+          const leg = rod(2.4, spec.height + 4, legMat, ink);
+          leg.position.set(dir * 8, spec.height / 2 - 1, z);
+          leg.rotation.z = dir * 0.32;
+          g.add(leg);
+        }
+      }
+      const light = inked(new RoundedBoxGeometry(6, 6, 6, 2, 2), toon(pal.spotA), 1.2, ink);
+      light.position.set(0, spec.height + 4, 44);
+      g.add(light);
+      return { group: g, debris: [pal.spotB, pal.paper, pal.ink] };
+    }
+    case "acunit": {
+      const body = inked(new RoundedBoxGeometry(58, 46, 48, 2, 4), toon(0xffffff, tex.grille), LINE, ink);
+      body.position.y = 27;
+      g.add(body);
+      const fan = new Mesh(new CircleGeometry(17, 24), toon(0xffffff, tex.fan));
+      fan.position.set(-6, 27, 24.4);
+      g.add(fan);
+      const blades = new Group();
+      for (let i = 0; i < 3; i++) {
+        const b = new Mesh(new BoxGeometry(3, 14, 1), toon(pal.metal));
+        b.position.y = 7;
+        const arm = new Object3D();
+        arm.rotation.z = (i * Math.PI * 2) / 3;
+        arm.add(b);
+        blades.add(arm);
+      }
+      blades.position.set(-6, 27, 25);
+      g.add(blades);
+      for (const x of [-22, 22]) {
+        const foot = inked(new RoundedBoxGeometry(8, 5, 44, 1, 1.5), toon(pal.metalDark), 1.2, ink);
+        foot.position.set(x, 2.5, 0);
+        g.add(foot);
+      }
+      return { group: g, debris: [pal.metal, pal.metalDark, pal.ink], spin: blades };
+    }
+    case "beam": {
+      const u = spec.underside!;
+      const mat = toon(pal.spotB);
+      const len = 170;
+      const top = inkBox(18, 4, len, mat, ink);
+      top.position.y = u + 18;
+      const web = inkBox(5, 14, len, mat, ink);
+      web.position.y = u + 9;
+      const bottom = inkBox(18, 4, len, mat, ink);
+      bottom.position.y = u + 2;
+      g.add(top, web, bottom);
+      for (const z of [-60, 60]) {
+        const cable = rod(1.1, 600, toon(pal.ink), ink, 0.6);
+        cable.position.set(0, u + 20 + 300, z);
+        g.add(cable);
+      }
+      return { group: g, debris: [pal.spotB, pal.ink] };
+    }
+    case "sign": {
+      const u = spec.underside!;
+      const board = inked(new RoundedBoxGeometry(84, 28, 4, 2, 1.5), toon(pal.spotA), LINE, ink);
+      board.position.y = u + 14;
+      g.add(board);
+      const face = new Mesh(new PlaneGeometry(80, 25), toon(0xffffff, tex.sign));
+      face.position.set(0, u + 14, 2.2);
+      g.add(face);
+      for (const x of [-30, 30]) {
+        const chain = rod(1, 600, toon(pal.metalDark), ink, 0.6);
+        chain.position.set(x, u + 28 + 300, 0);
+        g.add(chain);
+      }
+      return { group: g, debris: [pal.spotA, pal.ink] };
+    }
+    case "railing": {
+      const mat = toon(pal.spotA);
+      for (const z of [-52, 0, 52]) {
+        const post = rod(2.8, spec.height, mat, ink);
+        post.position.set(0, spec.height / 2, z);
+        g.add(post);
+      }
+      const rail = rod(3.4, 118, mat, ink);
+      rail.rotation.x = Math.PI / 2;
+      rail.position.y = spec.height;
+      g.add(rail);
+      const mid = rod(2, 110, mat, ink);
+      mid.rotation.x = Math.PI / 2;
+      mid.position.y = spec.height * 0.5;
+      g.add(mid);
+      return { group: g, debris: [pal.spotA, pal.ink] };
+    }
+    case "bench": {
+      const wood = toon(pal.wood);
+      const metal = toon(pal.ink);
+      for (let i = 0; i < 3; i++) {
+        const slat = inked(new RoundedBoxGeometry(8, 4, 120, 1, 1.5), wood, 1.4, ink);
+        slat.position.set(6 + i * 9, 24, 0);
+        g.add(slat);
+      }
+      for (let i = 0; i < 2; i++) {
+        const back = inked(new RoundedBoxGeometry(4, 8, 120, 1, 1.5), wood, 1.4, ink);
+        back.position.set(-1, 32 + i * 10, 0);
+        g.add(back);
+      }
+      for (const z of [-50, 50]) {
+        const leg = inkBox(4, 24, 4, metal, ink, 1);
+        leg.position.set(22, 12, z);
+        const legB = inkBox(4, 44, 4, metal, ink, 1);
+        legB.position.set(-1, 22, z);
+        g.add(leg, legB);
+      }
+      return { group: g, debris: [pal.wood, pal.woodDark, pal.ink] };
+    }
+    case "ledge":
+    case "edge":
+      return { group: g, debris: [] };
   }
 }
 
-export function makeObstacle(kind: ObstacleKind, pal: Palette): Container {
-  const view = new Container();
-  const ghost = new Graphics();
-  const s = pal.spotB;
-  DRAW[kind](ghost, { line: s, a: s, b: s, c: s, paper: s });
-  ghost.alpha = 0.5;
-  ghost.position.set(2.5, 1.5);
-  const main = new Graphics();
-  DRAW[kind](main, { line: pal.ink, a: pal.spotA, b: pal.spotB, c: pal.muted, paper: pal.paper });
-  view.addChild(ghost, main);
-  return view;
+/** A raised run of shipping containers the runner climbs onto and drops off. */
+export function makePlatform(pf: Platform, pal: Palette, tex: Textures): Group {
+  const g = new Group();
+  const { ink } = pal;
+  const len = pf.x1 - pf.x0;
+  const depth = 120;
+  const colors = [pal.container, pal.spotA, 0x7fb8b0];
+  const segLen = 240;
+  const segs = Math.max(1, Math.round(len / segLen));
+  const each = len / segs;
+  for (let i = 0; i < segs; i++) {
+    const t = tex.container.clone();
+    t.repeat.set(each / 128, 1);
+    t.needsUpdate = true;
+    const side = toon(colors[i % colors.length], t);
+    const top = toon(pal.paperDark, tex.roof);
+    const plain = toon(colors[i % colors.length]);
+    const box = inkBox(each, pf.h, depth, [plain, plain, top, plain, side, side], ink);
+    box.position.set(pf.x0 + each * (i + 0.5), pf.h / 2, -20);
+    g.add(box);
+    for (const x of [pf.x0 + each * i + 6, pf.x0 + each * (i + 1) - 6]) {
+      const corner = inkBox(10, pf.h, 8, toon(pal.ink), ink, 0);
+      corner.position.set(x, pf.h / 2, depth / 2 - 20 + 1);
+      g.add(corner);
+    }
+  }
+  return g;
 }

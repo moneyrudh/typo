@@ -23,7 +23,7 @@ function fitScale(): number {
 }
 
 function renderResolution(scale: number) {
-  return Math.min(3, Math.max(1, (window.devicePixelRatio || 1) * scale));
+  return Math.min(2.5, Math.max(1, (window.devicePixelRatio || 1) * scale));
 }
 
 async function loadFonts() {
@@ -158,15 +158,24 @@ async function main() {
     session.paused = document.hidden;
   });
 
-  scene.app.ticker.add((ticker) => {
-    const realDt = Math.min(0.05, ticker.deltaMS / 1000);
+  let last = performance.now();
+  const frameLoop = (now: number) => {
+    const realDt = Math.min(0.05, (now - last) / 1000);
+    last = now;
     // Outside a run the runner jogs in place behind the overlay.
     const gameDt = mode === "playing" ? session.update(realDt) : realDt * 0.5;
     scene.update(session, realDt, gameDt);
     hud.frame(session.windowLeft, session.slowness, realDt);
-  });
+    requestAnimationFrame(frameLoop);
+  };
+  requestAnimationFrame(frameLoop);
 
   showMenu();
+
+  if (import.meta.env.DEV) {
+    // Debug handle for poking at runs from the console / automated screenshots.
+    Object.assign(window, { __typo: { get session() { return session; }, map, start } });
+  }
 }
 
 main();

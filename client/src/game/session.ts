@@ -159,7 +159,7 @@ export class Session {
     for (let i = Math.max(0, this.cursor - 2); i < this.cursor; i++) {
       const s = this.map.slots[i];
       const r = this.runs[i];
-      if (r.state === "missed" && !r.crashed && this.gameT >= s.t2 + s.actionDur / 2) {
+      if (r.state === "missed" && !r.crashed && this.gameT >= s.hitT) {
         r.crashed = true;
         this.events.crash?.(s);
       }

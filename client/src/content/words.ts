@@ -1,55 +1,47 @@
 import type { Action, Biome } from "../game/types";
 
-// Word pools per action. Words only need to *feel* like the move — variety matters more
-// than strict synonyms, so nobody can just memorise "jump". Lowercase a–z only.
+// Every word must describe the move the runner actually performs, so pools are synonyms of
+// the action. Lowercase a–z only. A word may appear in more than one pool (e.g. "hurdle").
 
-type Pools = Partial<Record<Exclude<Action, "leap">, string[]>>;
-
-export const CORE: Required<Pools> = {
+export const CORE: Record<Action, string[]> = {
+  // Running jump over a low obstacle.
   jump: [
-    "jump", "hop", "leap", "bound", "spring", "bounce", "skip", "pounce", "soar", "rise",
-    "lift", "launch", "fly", "boing", "ascend", "rocket", "up", "hup", "upward", "airborne",
-    "elevate", "liftoff", "takeoff", "sky", "float", "lofty", "frog", "flea", "bunny", "kick",
-    "pop", "spry", "zoom", "whoosh", "boost", "heave", "hoist", "jolt", "perk", "vaunt",
-    "cloud", "orbit", "glide", "high", "upsy", "flutter", "bop", "jetpack", "pogo", "hurl",
+    "jump", "hop", "leap", "bound", "spring", "bounce", "skip", "pounce", "hurdle", "soar",
+    "clear", "launch", "boing",
   ],
+  // Baseball slide under something low.
   slide: [
-    "slide", "duck", "crouch", "slip", "skid", "scoot", "dive", "drop", "dip", "low",
-    "limbo", "squat", "stoop", "bend", "sweep", "swoop", "skate", "coast", "slither", "sneak",
-    "crawl", "tuck", "hunker", "lean", "slink", "lower", "floor", "sink", "flat", "under",
-    "belly", "glide", "sled", "skim", "snake", "zip", "whizz", "surf", "drift", "scurry",
-    "kneel", "bow", "nod", "shrink", "squish", "squeeze", "lay", "hug", "slick", "smooth",
+    "slide", "duck", "crouch", "slip", "skid", "glide", "scoot", "skim", "limbo", "stoop",
+    "squat", "hunker", "dip", "lower", "skate", "slink",
   ],
+  // Hands on the obstacle, legs swing over.
   vault: [
-    "vault", "flip", "hurdle", "clamber", "swing", "flick", "roll", "tumble", "spin", "twist",
-    "cartwheel", "kip", "palm", "push", "plant", "swivel", "pivot", "over", "fence", "scale",
-    "clear", "arc", "loop", "whirl", "twirl", "cross", "hand", "grip", "brace", "spring",
-    "lunge", "thrust", "pike", "split", "hurl", "rail", "step", "stride", "stunt", "trick",
-    "swoosh", "dash", "dart", "zigzag", "weave", "scoop", "swerve", "flail", "monkey", "lemur",
+    "vault", "kong", "swing", "straddle", "scissor", "flip", "overleap", "leapfrog",
+  ],
+  // Jump at a wall, grab the ledge, pull up.
+  climb: [
+    "climb", "scale", "mount", "mantle", "ascend", "clamber", "scramble", "grab", "hoist",
+    "shin", "pull", "haul", "rise",
+  ],
+  // Step off a ledge and land.
+  drop: [
+    "drop", "descend", "fall", "plunge", "dive", "sink", "alight", "land", "plop",
   ],
 };
 
-export const BIOME_EXTRAS: Record<Biome, Pools> = {
-  city: {
-    jump: ["rooftop", "ledge", "skyline", "antenna", "chimney", "pigeon", "tower", "crane"],
-    slide: ["alley", "gutter", "awning", "sewer", "tunnel", "manhole", "pavement", "kerb"],
-    vault: ["railing", "bench", "curb", "hydrant", "taxi", "bollard", "scooter", "mailbox"],
-  },
+/** Longer / trickier synonyms, used once per run on the finale obstacle. */
+export const TRICKY: Partial<Record<Action, string[]>> = {
+  jump: ["catapult", "skyrocket", "springboard", "bunnyhop", "somersault", "leapfrog"],
+  slide: ["hydroplane", "toboggan", "powerslide", "kneeslide", "slither"],
+  vault: ["handspring", "somersault", "overleap", "springboard"],
+  climb: ["mountaineer", "surmount", "clamber", "scramble", "boulder"],
 };
 
-// One tricky, relatively long word per run (the finale).
-export const TRICKY: string[] = [
-  "somersault", "kerfuffle", "labyrinth", "rhythm", "bamboozle", "hullabaloo", "flabbergast",
-  "skedaddle", "gymnastics", "trampoline", "pirouette", "mischievous", "quizzical",
-  "zigzagging", "juxtapose", "acrobatics", "catapult", "parkour", "conundrum", "whirligig",
-  "kaleidoscope", "hippopotamus", "rendezvous", "silhouette", "cacophony", "serendipity",
-  "phenomenon", "boomerang", "xylophone", "synchronize", "choreography", "aerodynamic",
-  "pneumatic", "quixotic", "mnemonic", "bureaucracy", "embarrass", "accommodate",
-  "onomatopoeia", "chrysanthemum", "discombobulate", "gobbledygook", "lollygag", "persnickety",
-  "rambunctious", "shenanigans", "brouhaha", "cattywampus", "nincompoop", "flibbertigibbet",
-];
+/** Optional biome-flavoured synonyms (still must match the action). */
+export const BIOME_EXTRAS: Record<Biome, Partial<Record<Action, string[]>>> = {
+  city: {},
+};
 
-export function poolFor(action: Exclude<Action, "leap">, biome: Biome): string[] {
-  const words = [...CORE[action], ...(BIOME_EXTRAS[biome][action] ?? [])];
-  return [...new Set(words)];
+export function poolFor(action: Action, biome: Biome): string[] {
+  return [...new Set([...CORE[action], ...(BIOME_EXTRAS[biome][action] ?? [])])];
 }

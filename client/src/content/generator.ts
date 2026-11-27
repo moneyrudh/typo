@@ -9,15 +9,23 @@ import {
   windowRealFor,
 } from "../config";
 import { createRng, type Rng } from "../engine/rng";
-import { ACTIONS, OBSTACLE_ACTION } from "../game/actions";
-import type { Action, Biome, DailyMap, ObstacleKind, Slot } from "../game/types";
+import { ACTIONS, OBSTACLES, PLATFORM_H } from "../game/actions";
+import type { Action, Biome, DailyMap, ObstacleKind, Platform, Slot } from "../game/types";
 import { CHUNKS, LENGTH_BY_DIFFICULTY, type Chunk } from "./chunks";
 import { poolFor, TRICKY } from "./words";
 
-const CONTENT_VERSION = 1;
+const CONTENT_VERSION = 2;
 const FIRST_SLOT_GAME = 1.4; // run-up before the first word
 
 type SlotPlan = { obstacle: ObstacleKind; action: Action; word: string; tricky: boolean; lead: number };
+
+/** The finale obstacle used for each action that has tricky words. */
+const FINALE_OBSTACLE: Partial<Record<Action, ObstacleKind>> = {
+  jump: "acunit",
+  slide: "beam",
+  vault: "railing",
+  climb: "ledge",
+};
 
 export function todayString(now = new Date()): string {
   const y = now.getFullYear();
@@ -38,14 +46,10 @@ export function generateDailyMap(date: string): DailyMap {
   const plans = planSlots(rng, biome);
   const slots = timeSlots(plans);
   const last = slots[slots.length - 1];
+  const lastSpec = ACTIONS[last.action];
+  const endT = Math.max(last.t2 + last.actionDur, last.hitT + lastSpec.crashDur) + RUN_TAIL_GAME;
 
-  return {
-    date,
-    day: dayNumber(date),
-    biome,
-    slots,
-    endT: last.t2 + last.actionDur + RUN_TAIL_GAME,
-  };
+  return { date, day: dayNumber(date), biome, slots, platforms: platformsFor(slots, endT), endT };
 }
 
 function planSlots(rng: Rng, biome: Biome): SlotPlan[] {
@@ -64,15 +68,21 @@ function planSlots(rng: Rng, biome: Biome): SlotPlan[] {
 
     for (const cs of chunk.slots) {
       const obstacle = rng.pick(cs.obstacles);
-      const action = OBSTACLE_ACTION[obstacle];
-      if (action === "leap") throw new Error(`chunk ${chunk.id} uses finale obstacle`);
+      const action = OBSTACLES[obstacle].action;
       const word = pickWord(rng, poolFor(action, biome), LENGTH_BY_DIFFICULTY[chunk.difficulty], used);
       plans.push({ obstacle, action, word, tricky: false, lead: (cs.lead ?? 0) + rng.next() * 0.35 });
     }
   }
 
-  // Finale: one tricky, longer word.
-  plans.push({ obstacle: "wall", action: "leap", word: rng.pick(TRICKY), tricky: true, lead: 0.6 });
+  // Finale: one tricky, longer synonym of the finale obstacle's action.
+  const finaleAction = rng.pick(Object.keys(FINALE_OBSTACLE) as Action[]);
+  plans.push({
+    obstacle: FINALE_OBSTACLE[finaleAction]!,
+    action: finaleAction,
+    word: rng.pick(TRICKY[finaleAction]!),
+    tricky: true,
+    lead: 0.6,
+  });
   return plans;
 }
 
@@ -85,31 +95,51 @@ function pickWord(rng: Rng, pool: string[], [min, max]: [number, number], used: 
   return word;
 }
 
-/** Lay slots out on the timeline so no two windows (or their actions) overlap. */
+/** Lay slots out on the timeline so no two windows, actions or crashes overlap. */
 function timeSlots(plans: SlotPlan[]): Slot[] {
   const slots: Slot[] = [];
   let prevEnd = FIRST_SLOT_GAME - SLOWMO_RAMP_GAME - WINDOW_GAME_GAP - MIN_SLOT_GAP_GAME;
+  let elev = 0;
 
   plans.forEach((p, index) => {
     const spec = ACTIONS[p.action];
     const windowReal = windowRealFor(p.word);
     const t2 = prevEnd + MIN_SLOT_GAP_GAME + SLOWMO_RAMP_GAME + WINDOW_GAME_GAP + p.lead;
-    const t1 = t2 - WINDOW_GAME_GAP;
+    const hitT = t2 + spec.contact * spec.duration;
+    const toElev = p.action === "climb" ? elev + PLATFORM_H : p.action === "drop" ? elev - PLATFORM_H : elev;
     slots.push({
       index,
       word: p.word,
       action: p.action,
       obstacle: p.obstacle,
       tricky: p.tricky,
-      x: RUN_SPEED * (t2 + spec.duration / 2),
-      t1,
+      x: RUN_SPEED * hitT,
+      elev,
+      toElev,
+      t1: t2 - WINDOW_GAME_GAP,
       t2,
       actionDur: spec.duration,
+      hitT,
       windowReal,
       slowmo: WINDOW_GAME_GAP / windowReal,
     });
-    prevEnd = t2 + spec.duration;
+    elev = toElev;
+    prevEnd = Math.max(t2 + spec.duration, hitT + spec.crashDur);
   });
 
   return slots;
+}
+
+function platformsFor(slots: Slot[], endT: number): Platform[] {
+  const platforms: Platform[] = [];
+  let open: Slot | undefined;
+  for (const s of slots) {
+    if (s.action === "climb") open = s;
+    if (s.action === "drop" && open) {
+      platforms.push({ x0: open.x, x1: s.x, h: PLATFORM_H });
+      open = undefined;
+    }
+  }
+  if (open) platforms.push({ x0: open.x, x1: RUN_SPEED * endT + 2000, h: PLATFORM_H });
+  return platforms;
 }
