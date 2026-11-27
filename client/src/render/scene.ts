@@ -20,6 +20,7 @@ import { Scarf } from "./character/scarf";
 import { Effects } from "./effects";
 import { makeTextures, setOutlineFog, type Textures } from "./materials";
 import { makeObstacle, makePlatform, type ObstacleView } from "./obstacles";
+import { SkinBook } from "./skins";
 import { PALETTES, type Palette } from "./palette";
 import { RisoRenderer } from "./riso";
 import { makeSky, World } from "./world";
@@ -40,6 +41,7 @@ export class Scene {
   private sun = new DirectionalLight(0xffffff, 2.1);
   private pal!: Palette;
   private tex!: Textures;
+  private skins!: SkinBook;
   private map?: DailyMap;
   private worldRoot = new Group();
   private rig!: Rig;
@@ -88,11 +90,12 @@ export class Scene {
     this.map = map;
     this.pal = PALETTES[map.biome];
     this.tex ??= makeTextures(this.pal);
+    this.skins ??= new SkinBook(this.pal);
     disposeTree(this.worldRoot);
     this.worldRoot = new Group();
     this.three.add(this.worldRoot);
 
-    const { pal, tex } = this;
+    const { pal, tex, skins } = this;
     this.three.background = null;
     this.riso.renderer.setClearColor(pal.sky);
     this.three.fog = new Fog(pal.sky, 1500, 3400);
@@ -102,11 +105,11 @@ export class Scene {
     this.worldRoot.add(new World(pal, tex, map.date, -900, xMax).group);
     this.camera.clear();
     this.camera.add(makeSky(pal));
-    for (const pf of map.platforms) this.worldRoot.add(makePlatform(pf, pal, tex));
+    for (const pf of map.platforms) this.worldRoot.add(makePlatform(pf, pal, tex, skins));
 
     this.obstacles = map.slots.map((s) => {
       if (s.obstacle === "ledge" || s.obstacle === "edge") return null;
-      const o = makeObstacle(s.obstacle, pal, tex);
+      const o = makeObstacle(s.obstacle, s.skin, pal, tex, skins);
       o.group.position.set(s.x, s.elev, 0);
       this.worldRoot.add(o.group);
       return o;

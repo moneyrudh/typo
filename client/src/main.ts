@@ -1,6 +1,7 @@
 import "./style.css";
 import { FRAME_H, FRAME_W } from "./config";
 import { generateDailyMap, todayString } from "./content/generator";
+import { CONTAINER_SKINS, SKIN_COUNT } from "./content/skins";
 import { Session } from "./game/session";
 import type { DailyMap } from "./game/types";
 import { Keyboard } from "./input/keyboard";
@@ -9,6 +10,7 @@ import { Scene } from "./render/scene";
 import { startGrain } from "./ui/grain";
 import { formatScore, Hud } from "./ui/hud";
 import { OUTCOME_LABEL } from "./ui/ratings";
+import { bindRunGrid, runGridHtml } from "./ui/runGrid";
 import { shareText } from "./ui/share";
 
 type Mode = "menu" | "playing" | "results";
@@ -37,6 +39,7 @@ async function loadFonts() {
 
 async function main() {
   const map: DailyMap = generateDailyMap(todayString());
+  if (import.meta.env.DEV) devOverrides(map);
   applyPaletteToCss(PALETTES[map.biome]);
 
   let scale = fitScale();
@@ -122,15 +125,13 @@ async function main() {
       <div class="stats">
         <div class="stat"><b>${Math.round(r.wpm)}</b><span>wpm</span></div>
         <div class="stat"><b>${Math.round(r.accuracy * 100)}%</b><span>accuracy</span></div>
-        <div class="stat"><b>🔥 ${r.bestCombo}</b><span>best streak</span></div>
+        <div class="stat"><b><i>🔥</i>${r.bestCombo}</b><span>best streak</span></div>
         <div class="stat"><b>${(r.reactionMs / 1000).toFixed(2)}s</b><span>avg reaction</span></div>
       </div>
-      <div class="squares">${r.outcomes
-        .map((o, i) => `<span class="sq ${o}${map.slots[i].tricky ? " tricky" : ""}" title="${map.slots[i].word}"></span>`)
-        .join("")}</div>
-      <div class="btn-row">
+      ${runGridHtml(map, r.outcomes)}
+      <div class="result-actions">
+        <button class="link" id="again-btn">practice run →</button>
         <button class="btn" id="share-btn">SHARE</button>
-        <button class="btn secondary" id="again-btn">run again</button>
       </div>`;
     overlay.className = "open";
     status.textContent = "";
@@ -145,6 +146,7 @@ async function main() {
       }
     });
     overlay.querySelector("#again-btn")!.addEventListener("click", start);
+    bindRunGrid(overlay.querySelector(".run-grid")!, map, r.outcomes);
   }
 
   new Keyboard(document.getElementById("keyboard")!, (key) => {
@@ -179,6 +181,15 @@ async function main() {
     // Debug handle for poking at runs from the console / automated screenshots.
     Object.assign(window, { __typo: { get session() { return session; }, map, start } });
   }
+}
+
+/** Dev only: `?skin=N` dresses every obstacle and container in skin N, to review the looks. */
+function devOverrides(map: DailyMap) {
+  const skin = new URLSearchParams(location.search).get("skin");
+  if (skin === null) return;
+  const n = Number(skin);
+  for (const s of map.slots) s.skin = n % SKIN_COUNT[s.obstacle];
+  for (const pf of map.platforms) pf.skins = pf.skins.map(() => n % CONTAINER_SKINS.length);
 }
 
 main();

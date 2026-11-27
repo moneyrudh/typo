@@ -13,12 +13,14 @@ import {
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { OBSTACLES } from "../game/actions";
 import type { ObstacleKind, Platform } from "../game/types";
+import { segmentsFor } from "../content/skins";
 import { inked, toon, type Textures } from "./materials";
 import type { Palette } from "./palette";
+import type { SkinBook } from "./skins";
 
 // 3D obstacles, built from primitives in world units with the origin at the bottom-centre
 // on the ground. Obstacles that span the path (rails, barriers, beams) run along z so they
-// read as real objects crossing the runner's lane.
+// read as real objects crossing the runner's lane. Shapes are fixed; `skin` picks the look.
 
 const LINE = 2;
 
@@ -49,14 +51,15 @@ function rod(r: number, len: number, mat: ReturnType<typeof toon>, ink: number, 
   return inked(new CylinderGeometry(r, r, len, 10), mat, t, ink);
 }
 
-export function makeObstacle(kind: ObstacleKind, pal: Palette, tex: Textures): ObstacleView {
+export function makeObstacle(kind: ObstacleKind, skin: number, pal: Palette, tex: Textures, skins: SkinBook): ObstacleView {
   const g = new Group();
   const { ink } = pal;
   const spec = OBSTACLES[kind];
 
   switch (kind) {
     case "crate": {
-      const mat = toon(0xffffff, tex.crate);
+      const look = skins.crate(skin);
+      const mat = toon(0xffffff, look.tex);
       const box = inked(new RoundedBoxGeometry(48, 48, 48, 2, 3), mat, LINE, ink);
       box.position.y = 24;
       box.rotation.y = 0.12;
@@ -65,10 +68,11 @@ export function makeObstacle(kind: ObstacleKind, pal: Palette, tex: Textures): O
       back.position.set(-10, 20, -46);
       back.rotation.y = -0.3;
       g.add(back);
-      return { group: g, debris: [pal.wood, pal.woodDark, pal.ink] };
+      return { group: g, debris: look.debris };
     }
     case "barrier": {
-      const board = inked(new RoundedBoxGeometry(8, 18, 110, 2, 2), toon(0xffffff, tex.stripes), LINE, ink);
+      const look = skins.barrier(skin);
+      const board = inked(new RoundedBoxGeometry(8, 18, 110, 2, 2), toon(0xffffff, look.tex), LINE, ink);
       board.position.y = spec.height - 9;
       g.add(board);
       const legMat = toon(pal.paper);
@@ -83,7 +87,7 @@ export function makeObstacle(kind: ObstacleKind, pal: Palette, tex: Textures): O
       const light = inked(new RoundedBoxGeometry(6, 6, 6, 2, 2), toon(pal.spotA), 1.2, ink);
       light.position.set(0, spec.height + 4, 44);
       g.add(light);
-      return { group: g, debris: [pal.spotB, pal.paper, pal.ink] };
+      return { group: g, debris: [look.colors[1], look.colors[0], pal.ink] };
     }
     case "acunit": {
       const body = inked(new RoundedBoxGeometry(58, 46, 48, 2, 4), toon(0xffffff, tex.grille), LINE, ink);
@@ -112,7 +116,8 @@ export function makeObstacle(kind: ObstacleKind, pal: Palette, tex: Textures): O
     }
     case "beam": {
       const u = spec.underside!;
-      const mat = toon(pal.spotB);
+      const color = skins.beam(skin);
+      const mat = toon(color);
       const len = 170;
       const top = inkBox(18, 4, len, mat, ink);
       top.position.y = u + 18;
@@ -126,14 +131,15 @@ export function makeObstacle(kind: ObstacleKind, pal: Palette, tex: Textures): O
         cable.position.set(0, u + 20 + 300, z);
         g.add(cable);
       }
-      return { group: g, debris: [pal.spotB, pal.ink] };
+      return { group: g, debris: [color, pal.ink] };
     }
     case "sign": {
       const u = spec.underside!;
-      const board = inked(new RoundedBoxGeometry(84, 28, 4, 2, 1.5), toon(pal.spotA), LINE, ink);
+      const look = skins.sign(skin);
+      const board = inked(new RoundedBoxGeometry(84, 28, 4, 2, 1.5), toon(look.board), LINE, ink);
       board.position.y = u + 14;
       g.add(board);
-      const face = new Mesh(new PlaneGeometry(80, 25), toon(0xffffff, tex.sign));
+      const face = new Mesh(new PlaneGeometry(80, 25), toon(0xffffff, look.tex));
       face.position.set(0, u + 14, 2.2);
       g.add(face);
       for (const x of [-30, 30]) {
@@ -141,10 +147,11 @@ export function makeObstacle(kind: ObstacleKind, pal: Palette, tex: Textures): O
         chain.position.set(x, u + 28 + 300, 0);
         g.add(chain);
       }
-      return { group: g, debris: [pal.spotA, pal.ink] };
+      return { group: g, debris: [look.board, pal.ink] };
     }
     case "railing": {
-      const mat = toon(pal.spotA);
+      const color = skins.railing(skin);
+      const mat = toon(color);
       for (const z of [-52, 0, 52]) {
         const post = rod(2.8, spec.height, mat, ink);
         post.position.set(0, spec.height / 2, z);
@@ -158,11 +165,12 @@ export function makeObstacle(kind: ObstacleKind, pal: Palette, tex: Textures): O
       mid.rotation.x = Math.PI / 2;
       mid.position.y = spec.height * 0.5;
       g.add(mid);
-      return { group: g, debris: [pal.spotA, pal.ink] };
+      return { group: g, debris: [color, pal.ink] };
     }
     case "bench": {
-      const wood = toon(pal.wood);
-      const metal = toon(pal.ink);
+      const look = skins.bench(skin);
+      const wood = toon(look.slats);
+      const metal = toon(look.frame);
       for (let i = 0; i < 3; i++) {
         const slat = inked(new RoundedBoxGeometry(8, 4, 120, 1, 1.5), wood, 1.4, ink);
         slat.position.set(6 + i * 9, 24, 0);
@@ -180,7 +188,7 @@ export function makeObstacle(kind: ObstacleKind, pal: Palette, tex: Textures): O
         legB.position.set(-1, 22, z);
         g.add(leg, legB);
       }
-      return { group: g, debris: [pal.wood, pal.woodDark, pal.ink] };
+      return { group: g, debris: [look.slats, look.frame, pal.ink] };
     }
     case "ledge":
     case "edge":
@@ -189,22 +197,20 @@ export function makeObstacle(kind: ObstacleKind, pal: Palette, tex: Textures): O
 }
 
 /** A raised run of shipping containers the runner climbs onto and drops off. */
-export function makePlatform(pf: Platform, pal: Palette, tex: Textures): Group {
+export function makePlatform(pf: Platform, pal: Palette, tex: Textures, skins: SkinBook): Group {
   const g = new Group();
   const { ink } = pal;
-  const len = pf.x1 - pf.x0;
   const depth = 120;
-  const colors = [pal.container, pal.spotA, 0x7fb8b0];
-  const segLen = 240;
-  const segs = Math.max(1, Math.round(len / segLen));
-  const each = len / segs;
+  const colors = [pal.container, pal.spotA, 0x7fb8b0, 0x6f8fd0, 0xe0705f];
+  const segs = segmentsFor(pf);
+  const each = (pf.x1 - pf.x0) / segs;
+  const top = toon(pal.paperDark, tex.roof);
   for (let i = 0; i < segs; i++) {
-    const t = tex.container.clone();
-    t.repeat.set(each / 128, 1);
-    t.needsUpdate = true;
-    const side = toon(colors[i % colors.length], t);
-    const top = toon(pal.paperDark, tex.roof);
-    const plain = toon(colors[i % colors.length]);
+    const skin = pf.skins[i] ?? 0;
+    // colour from position + skin, so neighbours rarely match
+    const color = colors[(Math.round(pf.x0 / 7) + i * 2 + skin) % colors.length];
+    const plain = toon(color);
+    const side = toon(0xffffff, skins.container(skin, color, Math.min(each, 600), pf.h));
     const box = inkBox(each, pf.h, depth, [plain, plain, top, plain, side, side], ink);
     box.position.set(pf.x0 + each * (i + 0.5), pf.h / 2, -20);
     g.add(box);

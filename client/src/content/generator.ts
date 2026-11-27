@@ -12,6 +12,7 @@ import { createRng, type Rng } from "../engine/rng";
 import { ACTIONS, OBSTACLES, PLATFORM_H } from "../game/actions";
 import type { Action, Biome, DailyMap, ObstacleKind, Platform, Slot } from "../game/types";
 import { CHUNKS, LENGTH_BY_DIFFICULTY, type Chunk } from "./chunks";
+import { assignSkins } from "./skins";
 import { poolFor, TRICKY } from "./words";
 
 const CONTENT_VERSION = 2;
@@ -49,7 +50,11 @@ export function generateDailyMap(date: string): DailyMap {
   const lastSpec = ACTIONS[last.action];
   const endT = Math.max(last.t2 + last.actionDur, last.hitT + lastSpec.crashDur) + RUN_TAIL_GAME;
 
-  return { date, day: dayNumber(date), biome, slots, platforms: platformsFor(slots, endT), endT };
+  const platforms = platformsFor(slots, endT);
+  // Own stream, so adding skins never changes which words a day gets.
+  assignSkins(createRng(`typo:${date}:skins`), slots, platforms);
+
+  return { date, day: dayNumber(date), biome, slots, platforms, endT };
 }
 
 function planSlots(rng: Rng, biome: Biome): SlotPlan[] {
@@ -126,6 +131,7 @@ function timeSlots(plans: SlotPlan[]): Slot[] {
       hitT,
       windowReal,
       slowmo: WINDOW_GAME_GAP / windowReal,
+      skin: 0, // set by assignSkins
     });
     elev = toElev;
     prevEnd = Math.max(t2 + spec.duration, hitT + spec.crashDur);
@@ -140,10 +146,10 @@ function platformsFor(slots: Slot[], endT: number): Platform[] {
   for (const s of slots) {
     if (s.action === "climb") open = s;
     if (s.action === "drop" && open) {
-      platforms.push({ x0: open.x, x1: s.x, h: PLATFORM_H });
+      platforms.push({ x0: open.x, x1: s.x, h: PLATFORM_H, skins: [] });
       open = undefined;
     }
   }
-  if (open) platforms.push({ x0: open.x, x1: RUN_SPEED * endT + 2000, h: PLATFORM_H });
+  if (open) platforms.push({ x0: open.x, x1: RUN_SPEED * endT + 2000, h: PLATFORM_H, skins: [] });
   return platforms;
 }

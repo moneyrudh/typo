@@ -165,28 +165,6 @@ export type Textures = ReturnType<typeof makeTextures>;
 export function makeTextures(pal: Palette) {
   const ink = css(pal.ink);
   return {
-    crate: canvasTexture(128, 128, (ctx, w, h) => {
-      ctx.fillStyle = css(pal.wood);
-      ctx.fillRect(0, 0, w, h);
-      ctx.strokeStyle = ink;
-      ctx.lineWidth = 5;
-      for (let y = 0; y <= h; y += h / 4) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(w, y);
-        ctx.stroke();
-      }
-      ctx.lineWidth = 10;
-      ctx.strokeRect(5, 5, w - 10, h - 10);
-      ctx.lineWidth = 9;
-      ctx.beginPath();
-      ctx.moveTo(10, 10);
-      ctx.lineTo(w - 10, h - 10);
-      ctx.stroke();
-      ctx.fillStyle = css(pal.woodDark);
-      for (let i = 0; i < 14; i++) ctx.fillRect(Math.random() * w, Math.random() * h, 12 + Math.random() * 16, 2);
-      speckle(ctx, w, h, ink);
-    }),
     stripes: canvasTexture(128, 32, (ctx, w, h) => {
       ctx.fillStyle = css(pal.paper);
       ctx.fillRect(0, 0, w, h);
@@ -235,42 +213,6 @@ export function makeTextures(pal: Palette) {
       ctx.lineTo(w / 2, h / 2 + w * 0.42);
       ctx.stroke();
     }),
-    sign: canvasTexture(256, 96, (ctx, w, h) => {
-      ctx.fillStyle = css(pal.spotA);
-      ctx.fillRect(0, 0, w, h);
-      ctx.strokeStyle = ink;
-      ctx.lineWidth = 10;
-      ctx.strokeRect(5, 5, w - 10, h - 10);
-      ctx.fillStyle = ink;
-      ctx.font = "bold 44px 'Lilita One', 'Arial Black', sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText("LOW", w / 2, h / 2 + 3);
-      for (const x of [34, w - 34]) {
-        ctx.beginPath();
-        ctx.moveTo(x - 14, 30);
-        ctx.lineTo(x, 60);
-        ctx.lineTo(x + 14, 30);
-        ctx.lineWidth = 8;
-        ctx.stroke();
-      }
-    }),
-    container: canvasTexture(
-      128,
-      128,
-      (ctx, w, h) => {
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(0, 0, w, h);
-        for (let x = 0; x < w; x += 16) {
-          ctx.fillStyle = "#c8c0c4";
-          ctx.fillRect(x, 0, 5, h);
-          ctx.fillStyle = "rgba(255,255,255,0.18)";
-          ctx.fillRect(x + 7, 0, 3, h);
-        }
-        speckle(ctx, w, h, ink, 0.06);
-      },
-      true,
-    ),
     roof: canvasTexture(
       128,
       128,

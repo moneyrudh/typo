@@ -37,10 +37,18 @@ export type Slot = {
   windowReal: number;
   /** Time scale during the window: WINDOW_GAME_GAP / windowReal. */
   slowmo: number;
+  /** Which look the obstacle has today (index into its skin list, see content/skins.ts). */
+  skin: number;
 };
 
 /** A raised block the runner climbs onto and later drops off. */
-export type Platform = { x0: number; x1: number; h: number };
+export type Platform = {
+  x0: number;
+  x1: number;
+  h: number;
+  /** Skin of each container segment, left to right. */
+  skins: number[];
+};
 
 export type DailyMap = {
   date: string; // YYYY-MM-DD
