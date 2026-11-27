@@ -2,7 +2,7 @@
 
 A daily side-scrolling parkour game where you type words to move.
 
-- `client/` — Vite + TypeScript + PixiJS game
+- `client/` — Vite + TypeScript + three.js game
 - `server/` — API (daily map, scores, leaderboards) — not built yet
 
 ## Running the client
