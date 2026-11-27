@@ -1,13 +1,13 @@
 import {
-  BASE_POINTS,
-  COMBO_CAP,
-  COMBO_STEP,
+  CLEAR_POINTS,
+  MIN_CLEAR_POINTS,
   SLOWMO_EXIT_REAL,
   SLOWMO_RAMP_GAME,
-  TRICKY_MULTIPLIER,
+  SPEED_POINTS,
+  TYPO_PENALTY,
 } from "../config";
 import { lerp, smoothstep } from "../engine/math";
-import type { DailyMap, Slot, SlotOutcome } from "./types";
+import type { DailyMap, Rating, Slot, SlotOutcome } from "./types";
 
 export type SlotState = "pending" | "active" | "typed" | "done" | "missed";
 
@@ -17,16 +17,36 @@ export type SlotRun = {
   keys: number; // letter keystrokes
   wrongKeys: number;
   activatedReal: number;
+  firstKeyReal: number | null;
   completedReal: number;
-  score: number;
+  score: number; // 0..1
+  rating: Rating | null;
   crashed: boolean;
 };
 
+const RATINGS: Rating[] = ["perfect", "great", "nice", "phew"];
+const PERFECT_BAND = 0.4; // fraction of the window
+
+/** Tier by the fraction of the window used to type the word; a typo costs one tier. */
+export function rateWord(usedFraction: number, wrongKeys: number): Rating {
+  const tier = usedFraction < PERFECT_BAND ? 0 : usedFraction < 0.6 ? 1 : usedFraction < 0.8 ? 2 : 3;
+  return RATINGS[Math.min(3, tier + (wrongKeys > 0 ? 1 : 0))];
+}
+
+/** Points for one cleared word, 0..1: mostly for clearing it, a little for speed, minus typos. */
+export function wordPoints(usedFraction: number, wrongKeys: number): number {
+  const speed = Math.min(1, Math.max(0, (1 - usedFraction) / (1 - PERFECT_BAND)));
+  const pts = CLEAR_POINTS + SPEED_POINTS * speed - TYPO_PENALTY * wrongKeys;
+  return Math.max(MIN_CLEAR_POINTS, pts);
+}
+
 export type Results = {
-  score: number;
+  score: number; // out of `total`
   cleared: number;
   total: number;
-  accuracy: number; // 0..1 over all letter keystrokes
+  accuracy: number; // 0..1 over all letter keystrokes inside windows
+  wpm: number; // typing speed over cleared words, window start → completion
+  reactionMs: number; // average time from word appearing to first key
   bestCombo: number;
   outcomes: SlotOutcome[];
   trickyCleared: boolean;
@@ -72,18 +92,16 @@ export class Session {
       keys: 0,
       wrongKeys: 0,
       activatedReal: 0,
+      firstKeyReal: null,
       completedReal: 0,
       score: 0,
+      rating: null,
       crashed: false,
     }));
   }
 
   get current(): Slot | undefined {
     return this.map.slots[this.cursor];
-  }
-
-  get comboMultiplier(): number {
-    return 1 + COMBO_STEP * Math.min(this.combo, COMBO_CAP);
   }
 
   /** 0 at normal speed, 1 at the deepest slow-mo of the current slot. */
@@ -175,6 +193,7 @@ export class Session {
     const prefixOk = s.word.startsWith(r.typed);
     const ok = prefixOk && s.word[r.typed.length] === ch;
     r.keys++;
+    r.firstKeyReal ??= this.realT;
     if (!ok) r.wrongKeys++;
     r.typed += ch;
     this.events.typed?.(s, r);
@@ -194,11 +213,9 @@ export class Session {
   private complete(s: Slot, r: SlotRun) {
     r.state = "typed";
     r.completedReal = this.realT;
-    const timeLeft = Math.max(0, s.windowReal - (this.realT - r.activatedReal));
-    const speedBonus = 1 + timeLeft / s.windowReal;
-    const accuracy = (r.keys - r.wrongKeys) / r.keys;
-    const base = BASE_POINTS * (s.tricky ? TRICKY_MULTIPLIER : 1);
-    r.score = Math.round(base * speedBonus * accuracy * this.comboMultiplier);
+    const used = this.realT - r.activatedReal;
+    r.rating = rateWord(used / s.windowReal, r.wrongKeys);
+    r.score = wordPoints(used / s.windowReal, r.wrongKeys);
     this.score += r.score;
 
     if (r.wrongKeys === 0) {
@@ -213,17 +230,29 @@ export class Session {
   outcome(i: number): SlotOutcome | null {
     const r = this.runs[i];
     if (r.state === "missed") return "missed";
-    if (r.state === "typed" || r.state === "done") return r.wrongKeys === 0 ? "perfect" : "clean";
+    if (r.state === "typed" || r.state === "done") return r.rating;
     return null;
   }
 
   results(): Results {
     let keys = 0;
     let wrong = 0;
-    for (const r of this.runs) {
+    let letters = 0;
+    let typingSec = 0;
+    let reactionSum = 0;
+    let reactions = 0;
+    this.runs.forEach((r, i) => {
       keys += r.keys;
       wrong += r.wrongKeys;
-    }
+      if (r.firstKeyReal !== null) {
+        reactionSum += r.firstKeyReal - r.activatedReal;
+        reactions++;
+      }
+      if (r.state === "typed" || r.state === "done") {
+        letters += this.map.slots[i].word.length;
+        typingSec += r.completedReal - r.activatedReal;
+      }
+    });
     const outcomes = this.map.slots.map((_, i) => this.outcome(i) ?? "missed");
     const trickyIdx = this.map.slots.findIndex((s) => s.tricky);
     return {
@@ -231,6 +260,8 @@ export class Session {
       cleared: outcomes.filter((o) => o !== "missed").length,
       total: outcomes.length,
       accuracy: keys === 0 ? 0 : (keys - wrong) / keys,
+      wpm: typingSec === 0 ? 0 : letters / 5 / (typingSec / 60),
+      reactionMs: reactions === 0 ? 0 : (reactionSum / reactions) * 1000,
       bestCombo: this.bestCombo,
       outcomes,
       trickyCleared: trickyIdx >= 0 && outcomes[trickyIdx] !== "missed",

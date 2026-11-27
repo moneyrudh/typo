@@ -2,6 +2,18 @@ import type { Biome } from "../game/types";
 
 // Risograph-style palettes: a paper colour, a dark ink and a couple of spot inks, plus a
 // handful of material tints mixed from them for the 3D scene.
+/** The hero's outfit — each biome can dress the runner differently. */
+export type Outfit = {
+  jacket: number;
+  trim: number;
+  pants: number;
+  boots: number;
+  soles: number;
+  scarf: number;
+  hair: number;
+  gloves: number;
+};
+
 export type Palette = {
   paper: number;
   paperDark: number;
@@ -11,7 +23,6 @@ export type Palette = {
   muted: number;
   sky: number;
   skin: number;
-  shorts: number;
   wood: number;
   woodDark: number;
   metal: number;
@@ -23,6 +34,7 @@ export type Palette = {
   buildings: number[];
   farBuildings: number[];
   skyline: [number, number];
+  hero: Outfit;
 };
 
 export const PALETTES: Record<Biome, Palette> = {
@@ -35,7 +47,6 @@ export const PALETTES: Record<Biome, Palette> = {
     muted: 0xa79d93,
     sky: 0xf6ead2,
     skin: 0xf6c48e,
-    shorts: 0x3a3550,
     wood: 0xe9b44c,
     woodDark: 0xb9802f,
     metal: 0xc9c2b8,
@@ -47,6 +58,16 @@ export const PALETTES: Record<Biome, Palette> = {
     buildings: [0xe9d9bb, 0xf3b9a6, 0xf2d27a, 0xd8cfc4, 0xffc2cd],
     farBuildings: [0xd9c7c0, 0xe3cfc6, 0xcfc0bb],
     skyline: [0xefc9c3, 0xe2c4bc],
+    hero: {
+      jacket: 0x2f3a62,
+      trim: 0xf5c518,
+      pants: 0x2c2934,
+      boots: 0xf4efe4,
+      soles: 0x231f2b,
+      scarf: 0xff4f6d,
+      hair: 0x1d1a26,
+      gloves: 0x231f2b,
+    },
   },
 };
 

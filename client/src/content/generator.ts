@@ -4,7 +4,7 @@ import {
   RUN_SPEED,
   RUN_TAIL_GAME,
   SLOWMO_RAMP_GAME,
-  TARGET_SLOTS,
+  WORDS_PER_RUN,
   WINDOW_GAME_GAP,
   windowRealFor,
 } from "../config";
@@ -58,11 +58,15 @@ function planSlots(rng: Rng, biome: Biome): SlotPlan[] {
   const plans: SlotPlan[] = [];
   let prevChunk: Chunk | undefined;
 
-  while (plans.length < TARGET_SLOTS) {
-    const progress = plans.length / TARGET_SLOTS;
+  const regular = WORDS_PER_RUN - 1; // the finale is the last word
+  while (plans.length < regular) {
+    const progress = plans.length / regular;
     const want = progress < 0.25 ? 1 : progress < 0.6 ? 2 : 3;
-    let options = chunks.filter((c) => c.difficulty === want && c !== prevChunk);
-    if (options.length === 0) options = chunks.filter((c) => c.difficulty <= want);
+    // Only chunks that fit exactly into the words left, so every run has the same count.
+    const fits = chunks.filter((c) => c.slots.length <= regular - plans.length);
+    let options = fits.filter((c) => c.difficulty === want && c !== prevChunk);
+    if (options.length === 0) options = fits.filter((c) => c.difficulty <= want);
+    if (options.length === 0) options = fits;
     const chunk = rng.pick(options);
     prevChunk = chunk;
 

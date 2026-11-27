@@ -6,6 +6,7 @@ import {
   Mesh,
   PerspectiveCamera,
   Scene as ThreeScene,
+  Vector3,
   type Object3D,
 } from "three";
 import { FRAME_W, GAME_H, RUN_SPEED, RUNNER_SCREEN_X } from "../config";
@@ -15,6 +16,7 @@ import type { DailyMap, Slot } from "../game/types";
 import { evaluate } from "./character/anim";
 import { lowestSole } from "./character/pose";
 import { Rig } from "./character/rig";
+import { Scarf } from "./character/scarf";
 import { Effects } from "./effects";
 import { makeTextures, setOutlineFog, type Textures } from "./materials";
 import { makeObstacle, makePlatform, type ObstacleView } from "./obstacles";
@@ -41,6 +43,8 @@ export class Scene {
   private map?: DailyMap;
   private worldRoot = new Group();
   private rig!: Rig;
+  private scarves: [Scarf, number][] = []; // tail + which side of the neck it leaves from
+  private anchor = new Vector3();
   private effects!: Effects;
   private obstacles: (ObstacleView | null)[] = [];
   private phase = 0;
@@ -110,6 +114,11 @@ export class Scene {
 
     this.rig = new Rig(pal);
     this.worldRoot.add(this.rig.root);
+    this.scarves = [
+      [new Scarf(10, 7, pal.hero.scarf, pal.ink), 1],
+      [new Scarf(7, 6.5, pal.hero.scarf, pal.ink, 1.7), -1],
+    ];
+    for (const [scarf] of this.scarves) this.worldRoot.add(scarf.group);
     this.effects = new Effects(pal);
     this.worldRoot.add(this.effects.group);
     this.reset();
@@ -198,6 +207,7 @@ export class Scene {
     const sink = m.kind === "run" ? Math.min(0, lowestSole(pose)) : 0;
     const py = baseElev + pose.y - sink;
     this.rig.apply(pose, px, py);
+    for (const [scarf, side] of this.scarves) scarf.update(this.rig.scarfAnchor(this.anchor, side), gameDt);
     const groundY = m.kind === "run" ? m.elev : m.slot.toElev;
 
     // one-shot effect beats
