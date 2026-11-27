@@ -438,31 +438,37 @@ body {
 }
 .tile {
   aspect-ratio: 1;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+.face {
+  width: 100%;
+  height: 100%;
   display: grid;
   place-items: center;
-  padding: 0;
   border: 2.5px solid var(--ink);
   border-radius: 7px;
   box-shadow: 2px 2px 0 var(--ink);
   font-family: var(--display);
   font-size: 11px;
   color: color-mix(in srgb, var(--ink) 55%, transparent);
-  cursor: pointer;
   animation: tile-in 0.32s cubic-bezier(0.3, 1.6, 0.5, 1) both;
   animation-delay: calc(var(--i) * 35ms + 150ms);
   transition: transform 0.1s;
 }
-.tile.on {
+.tile.on .face {
   transform: translate(-1px, -2px);
   box-shadow: 3px 4px 0 var(--ink);
   color: var(--ink);
 }
-.tile.tricky {
+.face.tricky {
   /* the tricky word: a coin with an inner ring, kept inside the grid's edges */
   border-radius: 50%;
   box-shadow: inset 0 0 0 2px var(--paper), inset 0 0 0 4px var(--ink), 2px 2px 0 var(--ink);
 }
-.tile.tricky.on {
+.tile.on .face.tricky {
   box-shadow: inset 0 0 0 2px var(--paper), inset 0 0 0 4px var(--ink), 3px 4px 0 var(--ink);
 }
 @keyframes tile-in {

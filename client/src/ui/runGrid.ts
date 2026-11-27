@@ -20,7 +20,9 @@ export function runGridHtml(map: DailyMap, outcomes: SlotOutcome[]): string {
   const tiles = outcomes
     .map((o, i) => {
       const tricky = map.slots[i].tricky ? " tricky" : "";
-      return `<button class="tile sq ${o}${tricky}" data-i="${i}" style="--i:${i}" aria-label="word ${i + 1}: ${map.slots[i].word}, ${OUTCOME_LABEL[o]}">${i + 1}</button>`;
+      // the button is a fixed hit area; only the inner face moves, so hovering near an
+      // edge can't push the tile out from under the pointer
+      return `<button class="tile" data-i="${i}" style="--i:${i}" aria-label="word ${i + 1}: ${map.slots[i].word}, ${OUTCOME_LABEL[o]}"><span class="face sq ${o}${tricky}">${i + 1}</span></button>`;
     })
     .join("");
   return `<div class="run-grid">
